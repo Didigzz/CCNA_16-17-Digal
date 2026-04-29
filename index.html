@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CCNA 1 v7 Practice Quiz</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Networking practice</p>
+        <h1>CCNA 1 v7 Modules 14-17 Quiz</h1>
+        <p class="hero-copy">Practice original questions on application layer communications, protocols, and network services with instant feedback after each answer.</p>
+      </div>
+      <div class="score-card" aria-live="polite">
+        <span class="score-label">Score</span>
+        <strong id="scoreValue">0 / 0</strong>
+        <span id="progressText">Question 1 of 1</span>
+      </div>
+    </section>
+
+    <section class="quiz-card" aria-label="Quiz area">
+      <div class="progress-wrap" aria-hidden="true">
+        <div class="progress-bar">
+          <span id="progressFill"></span>
+        </div>
+      </div>
+
+      <div class="question-meta">
+        <span id="questionTag" class="tag">CCNA practice</span>
+        <span id="questionCount">1 / 1</span>
+      </div>
+
+      <h2 id="questionText">Loading question...</h2>
+
+      <div id="answers" class="answers" role="list"></div>
+
+      <div id="feedback" class="feedback" aria-live="polite"></div>
+
+      <div class="actions">
+        <button id="prevBtn" class="btn btn-secondary" type="button" disabled>Back</button>
+        <button id="nextBtn" class="btn btn-primary" type="button" disabled>Next</button>
+        <button id="restartBtn" class="btn btn-secondary" type="button">Restart</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="data.js"></script>
+  <script src="quiz.js"></script>
+</body>
+</html>
