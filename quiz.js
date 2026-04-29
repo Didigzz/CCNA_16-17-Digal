@@ -127,9 +127,13 @@ function renderMultiselectQuestion(question, locked, savedState) {
 
   const correctIndexes = question.correctIndexes || [question.correctIndex];
   const requiredCount = correctIndexes.length;
+  const correctFound = selectedIndices.filter(i => correctIndexes.includes(i)).length;
+  const remaining = requiredCount - correctFound;
 
   feedbackEl.className = 'feedback';
-  feedbackEl.textContent = `Select ${requiredCount} answer${requiredCount > 1 ? 's' : ''} to see instant feedback.`;
+  feedbackEl.textContent = locked
+    ? ''
+    : `Find ${requiredCount} correct answer${requiredCount > 1 ? 's' : ''}. ${remaining > 0 ? remaining + ' remaining.' : ''}`;
 
   question.answers.forEach((answer, index) => {
     const button = document.createElement('button');
@@ -138,16 +142,14 @@ function renderMultiselectQuestion(question, locked, savedState) {
     button.textContent = answer;
     button.setAttribute('role', 'listitem');
 
-    if (locked) {
+    if (selectedIndices.includes(index)) {
+      // Restore state from history
       button.disabled = true;
       if (correctIndexes.includes(index)) button.classList.add('correct');
-      else if (selectedIndices.includes(index)) button.classList.add('wrong');
+      else button.classList.add('wrong');
+    } else if (locked) {
+      button.disabled = true;
     } else {
-      if (selectedIndices.includes(index)) {
-        button.style.borderColor = 'rgba(20, 92, 158, 0.8)';
-        button.style.backgroundColor = 'rgba(20, 92, 158, 0.05)';
-      }
-      // each button closes over its own index only; question looked up fresh on click
       button.addEventListener('click', () => handleMultiselect(index));
     }
 
@@ -157,11 +159,10 @@ function renderMultiselectQuestion(question, locked, savedState) {
   if (locked && savedState) {
     if (savedState.isCorrect) {
       feedbackEl.className = 'feedback success';
-      feedbackEl.innerHTML = `<strong>Correct.</strong> ${question.explanation || ''}`;
+      feedbackEl.innerHTML = `<strong>All correct!</strong> ${question.explanation || ''}`;
     } else {
-      const correctText = correctIndexes.map(i => question.answers[i]).join('", "');
       feedbackEl.className = 'feedback error';
-      feedbackEl.innerHTML = `<strong>Incorrect.</strong> Correct answer(s): <strong>"${correctText}"</strong>. ${question.explanation || ''}`;
+      feedbackEl.innerHTML = `<strong>Incorrect.</strong> ${question.explanation || ''}`;
     }
   }
 }
@@ -169,65 +170,55 @@ function renderMultiselectQuestion(question, locked, savedState) {
 function handleMultiselect(answerIndex) {
   if (questionLocked) return;
 
-  // Always read the live question — no stale closure values
   const question = questions[currentIndex];
   const correctIndexes = question.correctIndexes || [question.correctIndex];
   const requiredCount = correctIndexes.length;
 
-  // Toggle selection
-  const existingIdx = selectedIndices.indexOf(answerIndex);
-  if (existingIdx >= 0) {
-    selectedIndices.splice(existingIdx, 1);
-  } else {
-    // Don't allow selecting more than required
-    if (selectedIndices.length >= requiredCount) return;
-    selectedIndices.push(answerIndex);
-  }
+  // Ignore already-clicked buttons
+  if (selectedIndices.includes(answerIndex)) return;
 
-  // Update button highlight styles
+  selectedIndices.push(answerIndex);
+
+  const isThisCorrect = correctIndexes.includes(answerIndex);
+
+  // Immediately colour this button
   const buttons = Array.from(answersEl.querySelectorAll('.answer-btn'));
-  buttons.forEach((btn, i) => {
-    if (selectedIndices.includes(i)) {
-      btn.style.borderColor = 'rgba(20, 92, 158, 0.8)';
-      btn.style.backgroundColor = 'rgba(20, 92, 158, 0.05)';
-    } else {
-      btn.style.borderColor = '';
-      btn.style.backgroundColor = '';
-    }
-  });
+  const btn = buttons[answerIndex];
+  btn.disabled = true;
+  btn.classList.add(isThisCorrect ? 'correct' : 'wrong');
 
-  // Update hint
-  const remaining = requiredCount - selectedIndices.length;
-  feedbackEl.className = 'feedback';
-  feedbackEl.textContent = remaining > 0
-    ? `Select ${remaining} more answer${remaining > 1 ? 's' : ''}.`
-    : 'Submitting...';
+  // How many correct answers has the user found so far
+  const correctFound = selectedIndices.filter(i => correctIndexes.includes(i)).length;
+  const remaining = requiredCount - correctFound;
 
-  // Auto-submit once required count reached
-  if (selectedIndices.length === requiredCount) {
+  if (remaining > 0) {
+    // Still hunting — update hint, keep question open
+    feedbackEl.className = 'feedback';
+    feedbackEl.textContent = isThisCorrect
+      ? `✓ Correct! ${remaining} more correct answer${remaining > 1 ? 's' : ''} to find.`
+      : `✗ Wrong. Keep going — ${remaining} correct answer${remaining > 1 ? 's' : ''} still to find.`;
+  } else {
+    // All correct answers found — check if any wrong picks were made
     questionLocked = true;
-
-    const isCorrect =
-      selectedIndices.length === correctIndexes.length &&
-      selectedIndices.every(i => correctIndexes.includes(i));
+    const hadWrong = selectedIndices.some(i => !correctIndexes.includes(i));
+    const isCorrect = !hadWrong;
 
     userHistory[currentIndex] = { selectedIndices: [...selectedIndices], isCorrect };
 
-    buttons.forEach((btn, i) => {
-      btn.disabled = true;
-      btn.style.borderColor = '';
-      btn.style.backgroundColor = '';
-      if (correctIndexes.includes(i)) btn.classList.add('correct');
-      else if (selectedIndices.includes(i)) btn.classList.add('wrong');
+    // Reveal any un-clicked correct answers (in case user found all correct without clicking wrong ones)
+    buttons.forEach((b, i) => {
+      if (correctIndexes.includes(i)) {
+        b.disabled = true;
+        if (!b.classList.contains('correct')) b.classList.add('correct');
+      }
     });
 
     if (isCorrect) {
       feedbackEl.className = 'feedback success';
-      feedbackEl.innerHTML = `<strong>Correct.</strong> ${question.explanation || ''}`;
+      feedbackEl.innerHTML = `<strong>All correct!</strong> ${question.explanation || ''}`;
     } else {
-      const correctText = correctIndexes.map(i => question.answers[i]).join('", "');
       feedbackEl.className = 'feedback error';
-      feedbackEl.innerHTML = `<strong>Incorrect.</strong> Correct answer(s): <strong>"${correctText}"</strong>. ${question.explanation || ''}`;
+      feedbackEl.innerHTML = `<strong>Found all correct answers, but with wrong picks.</strong> ${question.explanation || ''}`;
     }
 
     nextBtn.textContent = currentIndex === questions.length - 1 ? 'Finish' : 'Next';
