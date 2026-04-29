@@ -402,32 +402,43 @@ function restartQuiz() {
   selectedIndices = [];
   matchSelections = {};
   userHistory     = [];
-  answerOrders    = {};
   questionLocked  = false;
-  questionOrder   = questions.map((_, i) => i);
+
+  // Always shuffle questions on restart
+  questionOrder = questions.map((_, i) => i);
+  shuffleArray(questionOrder);
+
+  // Pre-generate shuffled answer orders for all questions
+  answerOrders = {};
+  isShuffled   = true;
+  questionOrder.forEach((qIdx, pos) => {
+    const q = questions[qIdx];
+    if (!q.answers || q.type === 'match') return;
+    const order = q.answers.map((_, i) => i);
+    shuffleArray(order);
+    answerOrders[pos] = order;
+  });
+
   renderQuestion();
 }
 
 // ─── SHUFFLE ─────────────────────────────────────────────────────────────────
 
 function toggleShuffle() {
-  isShuffled = !isShuffled;
+  // Re-shuffle remaining questions and answers from current position
+  const remaining = questionOrder.slice(currentIndex);
+  shuffleArray(remaining);
+  questionOrder = [...questionOrder.slice(0, currentIndex), ...remaining];
 
-  if (isShuffled) {
-    shuffleBtn.textContent = '⇄ Shuffled';
-    shuffleBtn.classList.add('btn-shuffle-active');
-  } else {
-    shuffleBtn.textContent = '⇄ Shuffle';
-    shuffleBtn.classList.remove('btn-shuffle-active');
+  // Re-generate answer orders for current and future questions
+  for (let i = currentIndex; i < questions.length; i++) {
+    const q = questions[questionOrder[i]];
+    if (!q.answers || q.type === 'match') continue;
+    const order = q.answers.map((_, idx) => idx);
+    shuffleArray(order);
+    answerOrders[i] = order;
   }
 
-  // Keep question order fixed, just reset answer orders and re-render current question
-  answerOrders = {};
-  userHistory  = [];
-  currentIndex = 0;
-  selectedIndices = [];
-  matchSelections = {};
-  questionLocked  = false;
   renderQuestion();
 }
 
@@ -439,5 +450,9 @@ skipBtn.addEventListener('click', skipQuestion);
 shuffleBtn.addEventListener('click', toggleShuffle);
 restartBtn.addEventListener('click', restartQuiz);
 
-if (typeof questions !== 'undefined' && questions.length > 0) renderQuestion();
-else questionText.textContent = 'Error: Question data not found.';
+if (typeof questions !== 'undefined' && questions.length > 0) {
+  // Shuffle on first load too
+  restartQuiz();
+} else {
+  questionText.textContent = 'Error: Question data not found.';
+}
