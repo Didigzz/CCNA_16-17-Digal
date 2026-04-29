@@ -34,28 +34,20 @@ function renderMatchQuestion(question, locked, savedState) {
   answersEl.innerHTML = '';
   matchSelections = savedState ? { ...savedState.matchSelections } : {};
 
-  // Shuffle options for display
-  const optionIndices = question.pairs.map((_, i) => i);
-  if (!savedState) shuffleArray(optionIndices);
-
   const wrapper = document.createElement('div');
   wrapper.className = 'match-wrapper';
 
-  // Left column: categories
-  const catCol = document.createElement('div');
-  catCol.className = 'match-col match-categories';
-  question.pairs.forEach((pair, i) => {
-    const cell = document.createElement('div');
-    cell.className = 'match-category';
-    cell.dataset.catIndex = i;
-    cell.textContent = pair.category;
-    catCol.appendChild(cell);
-  });
+  // Render each pair as a row: category label + dropdown side by side (stacked on mobile)
+  question.pairs.forEach((pair, catIdx) => {
+    const pairRow = document.createElement('div');
+    pairRow.className = 'match-pair';
 
-  // Right column: options (dropdowns per category)
-  const optCol = document.createElement('div');
-  optCol.className = 'match-col match-options';
-  question.pairs.forEach((_, catIdx) => {
+    // Category label
+    const cat = document.createElement('div');
+    cat.className = 'match-category';
+    cat.textContent = pair.category;
+
+    // Dropdown
     const select = document.createElement('select');
     select.className = 'match-select';
     select.dataset.catIndex = catIdx;
@@ -68,10 +60,10 @@ function renderMatchQuestion(question, locked, savedState) {
     placeholder.selected = !(catIdx in matchSelections);
     select.appendChild(placeholder);
 
-    question.pairs.forEach((pair, optIdx) => {
+    question.pairs.forEach((p, optIdx) => {
       const opt = document.createElement('option');
       opt.value = optIdx;
-      opt.textContent = pair.option;
+      opt.textContent = p.option;
       if (matchSelections[catIdx] === optIdx) opt.selected = true;
       select.appendChild(opt);
     });
@@ -81,21 +73,17 @@ function renderMatchQuestion(question, locked, savedState) {
       checkMatchComplete(question);
     });
 
-    // Apply correct/wrong styling if locked
+    // Apply correct/wrong styling if already answered
     if (locked && savedState) {
       const chosen = matchSelections[catIdx];
-      if (chosen === catIdx) {
-        select.classList.add('match-correct');
-      } else {
-        select.classList.add('match-wrong');
-      }
+      select.classList.add(chosen === catIdx ? 'match-correct' : 'match-wrong');
     }
 
-    optCol.appendChild(select);
+    pairRow.appendChild(cat);
+    pairRow.appendChild(select);
+    wrapper.appendChild(pairRow);
   });
 
-  wrapper.appendChild(catCol);
-  wrapper.appendChild(optCol);
   answersEl.appendChild(wrapper);
 }
 
@@ -138,9 +126,10 @@ function renderMultiselectQuestion(question, locked, savedState) {
   selectedIndices = savedState ? [...savedState.selectedIndices] : [];
 
   const correctIndexes = question.correctIndexes || [question.correctIndex];
-  const needed = correctIndexes.length;
+  const requiredCount = correctIndexes.length;
 
-  feedbackEl.textContent = `Select ${needed} answer${needed > 1 ? 's' : ''} to see instant feedback.`;
+  feedbackEl.className = 'feedback';
+  feedbackEl.textContent = `Select ${requiredCount} answer${requiredCount > 1 ? 's' : ''} to see instant feedback.`;
 
   question.answers.forEach((answer, index) => {
     const button = document.createElement('button');
@@ -158,7 +147,8 @@ function renderMultiselectQuestion(question, locked, savedState) {
         button.style.borderColor = 'rgba(20, 92, 158, 0.8)';
         button.style.backgroundColor = 'rgba(20, 92, 158, 0.05)';
       }
-      button.addEventListener('click', () => handleMultiselect(index, needed, question));
+      // each button closes over its own index only; question looked up fresh on click
+      button.addEventListener('click', () => handleMultiselect(index));
     }
 
     answersEl.appendChild(button);
@@ -176,13 +166,25 @@ function renderMultiselectQuestion(question, locked, savedState) {
   }
 }
 
-function handleMultiselect(answerIndex, needed, question) {
+function handleMultiselect(answerIndex) {
   if (questionLocked) return;
 
-  const existingIdx = selectedIndices.indexOf(answerIndex);
-  if (existingIdx >= 0) selectedIndices.splice(existingIdx, 1);
-  else selectedIndices.push(answerIndex);
+  // Always read the live question — no stale closure values
+  const question = questions[currentIndex];
+  const correctIndexes = question.correctIndexes || [question.correctIndex];
+  const requiredCount = correctIndexes.length;
 
+  // Toggle selection
+  const existingIdx = selectedIndices.indexOf(answerIndex);
+  if (existingIdx >= 0) {
+    selectedIndices.splice(existingIdx, 1);
+  } else {
+    // Don't allow selecting more than required
+    if (selectedIndices.length >= requiredCount) return;
+    selectedIndices.push(answerIndex);
+  }
+
+  // Update button highlight styles
   const buttons = Array.from(answersEl.querySelectorAll('.answer-btn'));
   buttons.forEach((btn, i) => {
     if (selectedIndices.includes(i)) {
@@ -194,9 +196,17 @@ function handleMultiselect(answerIndex, needed, question) {
     }
   });
 
-  if (selectedIndices.length === needed) {
+  // Update hint
+  const remaining = requiredCount - selectedIndices.length;
+  feedbackEl.className = 'feedback';
+  feedbackEl.textContent = remaining > 0
+    ? `Select ${remaining} more answer${remaining > 1 ? 's' : ''}.`
+    : 'Submitting...';
+
+  // Auto-submit once required count reached
+  if (selectedIndices.length === requiredCount) {
     questionLocked = true;
-    const correctIndexes = question.correctIndexes || [question.correctIndex];
+
     const isCorrect =
       selectedIndices.length === correctIndexes.length &&
       selectedIndices.every(i => correctIndexes.includes(i));

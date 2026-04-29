@@ -237,6 +237,7 @@ const questions = [
   {
     id: 21,
     topic: 'Module 16-17',
+    type: 'multiselect',
     question: 'A network administrator is upgrading a small business network to give high priority to real-time applications traffic. What two types of network services is the network administrator trying to accommodate? (Choose two.)',
     answers: ['voice', 'video', 'instant messaging', 'FTP', 'SNMP'],
     correctIndexes: [0, 1],
@@ -421,6 +422,7 @@ const questions = [
   {
     id: 37,
     topic: 'Module 16-17',
+    type: 'multiselect',
     question: 'A Windows PC shows an IP address of 169.254.10.3 after running ipconfig. Which two conclusions can be drawn? (Choose two.)',
     answers: [
       'The PC cannot contact a DHCP server.',
@@ -474,6 +476,7 @@ const questions = [
   {
     id: 42,
     topic: 'Module 16-17',
+    type: 'multiselect',
     question: 'On which two interfaces or ports can security be improved by configuring executive timeouts? (Choose two.)',
     answers: ['Fast Ethernet interfaces', 'console ports', 'serial interfaces', 'vty ports', 'loopback interfaces'],
     correctIndexes: [1, 3],
@@ -483,6 +486,7 @@ const questions = [
   {
     id: 43,
     topic: 'Module 16-17',
+    type: 'multiselect',
     question: 'When configuring SSH on a router, a network engineer has issued the login local and transport input ssh commands. What three additional actions are needed? (Choose three.)',
     answers: [
       'Set the user privilege levels.',
