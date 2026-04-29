@@ -10,6 +10,7 @@ const progressFill = document.getElementById('progressFill');
 const progressText = document.getElementById('progressText');
 const scoreValue = document.getElementById('scoreValue');
 
+const skipBtn = document.getElementById('skipBtn');
 let currentIndex = 0;
 let selectedIndices = [];
 let matchSelections = {}; // { categoryIndex: optionIndex } for match questions
@@ -116,6 +117,7 @@ function checkMatchComplete(question) {
 
   nextBtn.textContent = currentIndex === questions.length - 1 ? 'Finish' : 'Next';
   nextBtn.disabled = false;
+  skipBtn.disabled = true;
   updateHeader();
 }
 
@@ -223,6 +225,7 @@ function handleMultiselect(answerIndex) {
 
     nextBtn.textContent = currentIndex === questions.length - 1 ? 'Finish' : 'Next';
     nextBtn.disabled = false;
+    skipBtn.disabled = true;
     updateHeader();
   }
 }
@@ -237,6 +240,8 @@ function renderQuestion() {
 
   prevBtn.disabled = currentIndex === 0;
   nextBtn.disabled = true;
+  skipBtn.disabled = false;
+  skipBtn.style.display = currentIndex === questions.length - 1 ? 'none' : '';
   feedbackEl.className = 'feedback';
   feedbackEl.textContent = '';
 
@@ -253,12 +258,14 @@ function renderQuestion() {
     renderMatchQuestion(question, locked, savedState);
     if (locked) {
       nextBtn.disabled = false;
+      skipBtn.disabled = true;
       nextBtn.textContent = currentIndex === questions.length - 1 ? 'Finish' : 'Next';
     }
   } else if (question.type === 'multiselect') {
     renderMultiselectQuestion(question, locked, savedState);
     if (locked) {
       nextBtn.disabled = false;
+      skipBtn.disabled = true;
       nextBtn.textContent = currentIndex === questions.length - 1 ? 'Finish' : 'Next';
     }
   } else {
@@ -295,6 +302,7 @@ function renderQuestion() {
       }
 
       nextBtn.disabled = false;
+      skipBtn.disabled = true;
       nextBtn.textContent = currentIndex === questions.length - 1 ? 'Finish' : 'Next';
     } else {
       nextBtn.textContent = 'Next';
@@ -333,6 +341,7 @@ function handleAnswer(answerIndex) {
 
   nextBtn.textContent = currentIndex === questions.length - 1 ? 'Finish' : 'Next';
   nextBtn.disabled = false;
+  skipBtn.disabled = true;
   updateHeader();
 }
 
@@ -373,6 +382,15 @@ function goToPrevQuestion() {
   }
 }
 
+function skipQuestion() {
+  if (currentIndex >= questions.length - 1) return;
+  // Mark as skipped in history (not answered, not scored)
+  if (!userHistory[currentIndex]) {
+    userHistory[currentIndex] = { skipped: true, isCorrect: false, selectedIndices: [] };
+  }
+  currentIndex += 1;
+  renderQuestion();
+}
 function restartQuiz() {
   currentIndex = 0;
   selectedIndices = [];
@@ -395,6 +413,7 @@ function shuffleArray(arr) {
 
 prevBtn.addEventListener('click', goToPrevQuestion);
 nextBtn.addEventListener('click', goToNextQuestion);
+skipBtn.addEventListener('click', skipQuestion);
 restartBtn.addEventListener('click', restartQuiz);
 
 if (typeof questions !== 'undefined' && questions.length > 0) renderQuestion();

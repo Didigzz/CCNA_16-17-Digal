@@ -281,6 +281,15 @@ h2 {
   color: var(--primary-strong);
 }
 
+.btn-skip {
+  background: rgba(180, 35, 24, 0.08);
+  color: #8c221a;
+}
+
+.btn-skip:hover:not(:disabled) {
+  background: rgba(180, 35, 24, 0.15);
+}
+
 @media (max-width: 720px) {
   .app-shell {
     width: min(100% - 20px, 1000px);
