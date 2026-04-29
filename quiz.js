@@ -1,35 +1,65 @@
-const questionText = document.getElementById('questionText');
-const questionTag = document.getElementById('questionTag');
+const questionText  = document.getElementById('questionText');
+const questionTag   = document.getElementById('questionTag');
 const questionCount = document.getElementById('questionCount');
-const answersEl = document.getElementById('answers');
-const feedbackEl = document.getElementById('feedback');
-const prevBtn = document.getElementById('prevBtn');
-const nextBtn = document.getElementById('nextBtn');
-const restartBtn = document.getElementById('restartBtn');
-const progressFill = document.getElementById('progressFill');
-const progressText = document.getElementById('progressText');
-const scoreValue = document.getElementById('scoreValue');
+const answersEl     = document.getElementById('answers');
+const feedbackEl    = document.getElementById('feedback');
+const prevBtn       = document.getElementById('prevBtn');
+const nextBtn       = document.getElementById('nextBtn');
+const skipBtn       = document.getElementById('skipBtn');
+const shuffleBtn    = document.getElementById('shuffleBtn');
+const restartBtn    = document.getElementById('restartBtn');
+const progressFill  = document.getElementById('progressFill');
+const progressText  = document.getElementById('progressText');
+const scoreValue    = document.getElementById('scoreValue');
 
-const skipBtn = document.getElementById('skipBtn');
-let currentIndex = 0;
+let currentIndex    = 0;
 let selectedIndices = [];
-let matchSelections = {}; // { categoryIndex: optionIndex } for match questions
-let questionLocked = false;
-let userHistory = [];
+let matchSelections = {};
+let questionLocked  = false;
+let userHistory     = [];
+let questionOrder   = questions.map((_, i) => i);
+let answerOrders    = {}; // stable shuffled answer order per position
+let isShuffled      = false;
 
-function updateHeader() {
-  const currentQuestionNumber = Math.min(currentIndex + 1, questions.length);
-  const totalQuestions = questions.length;
-  const progressPercent = totalQuestions === 0 ? 0 : (currentQuestionNumber / totalQuestions) * 100;
-  const currentScore = userHistory.filter(h => h && h.isCorrect).length;
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
 
-  questionCount.textContent = `${currentQuestionNumber} / ${totalQuestions}`;
-  progressText.textContent = `Question ${currentQuestionNumber} of ${totalQuestions}`;
-  progressFill.style.width = `${progressPercent}%`;
-  scoreValue.textContent = `${currentScore} / ${totalQuestions}`;
+function currentQuestion() {
+  return questions[questionOrder[currentIndex]];
 }
 
-// ─── MATCH QUESTION RENDERER ────────────────────────────────────────────────
+function shuffleArray(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
+
+// Returns a stable display order (array of original indices) for current question's answers.
+// Match questions are never shuffled. Order is generated once and cached per position.
+function getAnswerOrder(question) {
+  if (!isShuffled || question.type === 'match' || !question.answers) {
+    return question.answers ? question.answers.map((_, i) => i) : [];
+  }
+  if (!answerOrders[currentIndex]) {
+    const order = question.answers.map((_, i) => i);
+    shuffleArray(order);
+    answerOrders[currentIndex] = order;
+  }
+  return answerOrders[currentIndex];
+}
+
+function updateHeader() {
+  const num   = Math.min(currentIndex + 1, questions.length);
+  const total = questions.length;
+  const score = userHistory.filter(h => h && h.isCorrect).length;
+
+  questionCount.textContent = `${num} / ${total}`;
+  progressText.textContent  = `Question ${num} of ${total}`;
+  progressFill.style.width  = `${(num / total) * 100}%`;
+  scoreValue.textContent    = `${score} / ${total}`;
+}
+
+// ─── MATCH RENDERER ──────────────────────────────────────────────────────────
 
 function renderMatchQuestion(question, locked, savedState) {
   answersEl.innerHTML = '';
@@ -38,32 +68,29 @@ function renderMatchQuestion(question, locked, savedState) {
   const wrapper = document.createElement('div');
   wrapper.className = 'match-wrapper';
 
-  // Render each pair as a row: category label + dropdown side by side (stacked on mobile)
   question.pairs.forEach((pair, catIdx) => {
-    const pairRow = document.createElement('div');
-    pairRow.className = 'match-pair';
+    const row = document.createElement('div');
+    row.className = 'match-pair';
 
-    // Category label
     const cat = document.createElement('div');
     cat.className = 'match-category';
     cat.textContent = pair.category;
 
-    // Dropdown
     const select = document.createElement('select');
     select.className = 'match-select';
     select.dataset.catIndex = catIdx;
     select.disabled = locked;
 
     const placeholder = document.createElement('option');
-    placeholder.value = '';
+    placeholder.value       = '';
     placeholder.textContent = '— select an option —';
-    placeholder.disabled = true;
-    placeholder.selected = !(catIdx in matchSelections);
+    placeholder.disabled    = true;
+    placeholder.selected    = !(catIdx in matchSelections);
     select.appendChild(placeholder);
 
     question.pairs.forEach((p, optIdx) => {
       const opt = document.createElement('option');
-      opt.value = optIdx;
+      opt.value       = optIdx;
       opt.textContent = p.option;
       if (matchSelections[catIdx] === optIdx) opt.selected = true;
       select.appendChild(opt);
@@ -74,15 +101,13 @@ function renderMatchQuestion(question, locked, savedState) {
       checkMatchComplete(question);
     });
 
-    // Apply correct/wrong styling if already answered
     if (locked && savedState) {
-      const chosen = matchSelections[catIdx];
-      select.classList.add(chosen === catIdx ? 'match-correct' : 'match-wrong');
+      select.classList.add(matchSelections[catIdx] === catIdx ? 'match-correct' : 'match-wrong');
     }
 
-    pairRow.appendChild(cat);
-    pairRow.appendChild(select);
-    wrapper.appendChild(pairRow);
+    row.appendChild(cat);
+    row.appendChild(select);
+    wrapper.appendChild(row);
   });
 
   answersEl.appendChild(wrapper);
@@ -95,214 +120,195 @@ function checkMatchComplete(question) {
   questionLocked = true;
   const isCorrect = question.pairs.every((_, i) => matchSelections[i] === i);
 
-  // Apply visual feedback to selects
-  const selects = answersEl.querySelectorAll('.match-select');
-  selects.forEach(sel => {
+  answersEl.querySelectorAll('.match-select').forEach(sel => {
     sel.disabled = true;
-    const catIdx = parseInt(sel.dataset.catIndex);
-    if (matchSelections[catIdx] === catIdx) sel.classList.add('match-correct');
-    else sel.classList.add('match-wrong');
+    const idx = parseInt(sel.dataset.catIndex);
+    sel.classList.add(matchSelections[idx] === idx ? 'match-correct' : 'match-wrong');
   });
 
   userHistory[currentIndex] = { matchSelections: { ...matchSelections }, isCorrect };
 
-  if (isCorrect) {
-    feedbackEl.className = 'feedback success';
-    feedbackEl.innerHTML = `<strong>Correct.</strong> ${question.explanation || ''}`;
-  } else {
-    const correctList = question.pairs.map(p => `<em>${p.category}</em> → "${p.option}"`).join('<br>');
-    feedbackEl.className = 'feedback error';
-    feedbackEl.innerHTML = `<strong>Incorrect.</strong> Correct matches:<br>${correctList}<br><br>${question.explanation || ''}`;
-  }
+  feedbackEl.className = isCorrect ? 'feedback success' : 'feedback error';
+  feedbackEl.innerHTML = isCorrect
+    ? `<strong>Correct.</strong> ${question.explanation || ''}`
+    : `<strong>Incorrect.</strong> Correct matches:<br>${question.pairs.map(p => `<em>${p.category}</em> → "${p.option}"`).join('<br>')}<br><br>${question.explanation || ''}`;
 
   nextBtn.textContent = currentIndex === questions.length - 1 ? 'Finish' : 'Next';
-  nextBtn.disabled = false;
-  skipBtn.disabled = true;
+  nextBtn.disabled    = false;
+  skipBtn.disabled    = true;
   updateHeader();
 }
 
-// ─── MULTISELECT QUESTION RENDERER ──────────────────────────────────────────
+// ─── MULTISELECT RENDERER ────────────────────────────────────────────────────
 
 function renderMultiselectQuestion(question, locked, savedState) {
   answersEl.innerHTML = '';
   selectedIndices = savedState ? [...savedState.selectedIndices] : [];
 
   const correctIndexes = question.correctIndexes || [question.correctIndex];
-  const requiredCount = correctIndexes.length;
-  const correctFound = selectedIndices.filter(i => correctIndexes.includes(i)).length;
-  const remaining = requiredCount - correctFound;
+  const requiredCount  = correctIndexes.length;
+  const correctFound   = selectedIndices.filter(i => correctIndexes.includes(i)).length;
+  const remaining      = requiredCount - correctFound;
 
-  feedbackEl.className = 'feedback';
+  feedbackEl.className   = 'feedback';
   feedbackEl.textContent = locked
     ? ''
     : `Find ${requiredCount} correct answer${requiredCount > 1 ? 's' : ''}. ${remaining > 0 ? remaining + ' remaining.' : ''}`;
 
-  question.answers.forEach((answer, index) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'answer-btn';
-    button.textContent = answer;
-    button.setAttribute('role', 'listitem');
+  const answerOrder = getAnswerOrder(question);
+  answerOrder.forEach(origIdx => {
+    const btn = document.createElement('button');
+    btn.type            = 'button';
+    btn.className       = 'answer-btn';
+    btn.textContent     = question.answers[origIdx];
+    btn.dataset.origIdx = origIdx;
+    btn.setAttribute('role', 'listitem');
 
-    if (selectedIndices.includes(index)) {
-      // Restore state from history
-      button.disabled = true;
-      if (correctIndexes.includes(index)) button.classList.add('correct');
-      else button.classList.add('wrong');
+    if (selectedIndices.includes(origIdx)) {
+      btn.disabled = true;
+      btn.classList.add(correctIndexes.includes(origIdx) ? 'correct' : 'wrong');
     } else if (locked) {
-      button.disabled = true;
+      btn.disabled = true;
     } else {
-      button.addEventListener('click', () => handleMultiselect(index));
+      btn.addEventListener('click', () => handleMultiselect(origIdx));
     }
 
-    answersEl.appendChild(button);
+    answersEl.appendChild(btn);
   });
 
   if (locked && savedState) {
-    if (savedState.isCorrect) {
-      feedbackEl.className = 'feedback success';
-      feedbackEl.innerHTML = `<strong>All correct!</strong> ${question.explanation || ''}`;
-    } else {
-      feedbackEl.className = 'feedback error';
-      feedbackEl.innerHTML = `<strong>Incorrect.</strong> ${question.explanation || ''}`;
-    }
+    feedbackEl.className = savedState.isCorrect ? 'feedback success' : 'feedback error';
+    feedbackEl.innerHTML = savedState.isCorrect
+      ? `<strong>All correct!</strong> ${question.explanation || ''}`
+      : `<strong>Incorrect.</strong> ${question.explanation || ''}`;
   }
 }
 
-function handleMultiselect(answerIndex) {
+function handleMultiselect(origIdx) {
   if (questionLocked) return;
 
-  const question = questions[currentIndex];
+  const question       = currentQuestion();
   const correctIndexes = question.correctIndexes || [question.correctIndex];
-  const requiredCount = correctIndexes.length;
+  const requiredCount  = correctIndexes.length;
 
-  // Ignore already-clicked buttons
-  if (selectedIndices.includes(answerIndex)) return;
+  if (selectedIndices.includes(origIdx)) return;
+  selectedIndices.push(origIdx);
 
-  selectedIndices.push(answerIndex);
+  const isThisCorrect = correctIndexes.includes(origIdx);
 
-  const isThisCorrect = correctIndexes.includes(answerIndex);
+  // Colour the clicked button immediately
+  const clicked = answersEl.querySelector(`[data-orig-idx="${origIdx}"]`);
+  if (clicked) {
+    clicked.disabled = true;
+    clicked.classList.add(isThisCorrect ? 'correct' : 'wrong');
+  }
 
-  // Immediately colour this button
-  const buttons = Array.from(answersEl.querySelectorAll('.answer-btn'));
-  const btn = buttons[answerIndex];
-  btn.disabled = true;
-  btn.classList.add(isThisCorrect ? 'correct' : 'wrong');
-
-  // How many correct answers has the user found so far
   const correctFound = selectedIndices.filter(i => correctIndexes.includes(i)).length;
-  const remaining = requiredCount - correctFound;
+  const remaining    = requiredCount - correctFound;
 
   if (remaining > 0) {
-    // Still hunting — update hint, keep question open
-    feedbackEl.className = 'feedback';
+    feedbackEl.className   = 'feedback';
     feedbackEl.textContent = isThisCorrect
       ? `✓ Correct! ${remaining} more correct answer${remaining > 1 ? 's' : ''} to find.`
       : `✗ Wrong. Keep going — ${remaining} correct answer${remaining > 1 ? 's' : ''} still to find.`;
   } else {
-    // All correct answers found — check if any wrong picks were made
-    questionLocked = true;
-    const hadWrong = selectedIndices.some(i => !correctIndexes.includes(i));
+    questionLocked  = true;
+    const hadWrong  = selectedIndices.some(i => !correctIndexes.includes(i));
     const isCorrect = !hadWrong;
 
     userHistory[currentIndex] = { selectedIndices: [...selectedIndices], isCorrect };
 
-    // Reveal any un-clicked correct answers (in case user found all correct without clicking wrong ones)
-    buttons.forEach((b, i) => {
-      if (correctIndexes.includes(i)) {
-        b.disabled = true;
-        if (!b.classList.contains('correct')) b.classList.add('correct');
+    // Highlight any remaining correct answers not yet clicked
+    answersEl.querySelectorAll('.answer-btn').forEach(btn => {
+      const idx = parseInt(btn.dataset.origIdx);
+      if (correctIndexes.includes(idx) && !btn.classList.contains('correct')) {
+        btn.disabled = true;
+        btn.classList.add('correct');
       }
     });
 
-    if (isCorrect) {
-      feedbackEl.className = 'feedback success';
-      feedbackEl.innerHTML = `<strong>All correct!</strong> ${question.explanation || ''}`;
-    } else {
-      feedbackEl.className = 'feedback error';
-      feedbackEl.innerHTML = `<strong>Found all correct answers, but with wrong picks.</strong> ${question.explanation || ''}`;
-    }
+    feedbackEl.className = isCorrect ? 'feedback success' : 'feedback error';
+    feedbackEl.innerHTML = isCorrect
+      ? `<strong>All correct!</strong> ${question.explanation || ''}`
+      : `<strong>Found all correct answers, but with wrong picks.</strong> ${question.explanation || ''}`;
 
     nextBtn.textContent = currentIndex === questions.length - 1 ? 'Finish' : 'Next';
-    nextBtn.disabled = false;
-    skipBtn.disabled = true;
+    nextBtn.disabled    = false;
+    skipBtn.disabled    = true;
     updateHeader();
   }
 }
 
-// ─── STANDARD QUESTION RENDERER ─────────────────────────────────────────────
+// ─── STANDARD RENDERER ───────────────────────────────────────────────────────
 
 function renderQuestion() {
-  const question = questions[currentIndex];
+  const question  = currentQuestion();
   selectedIndices = [];
   matchSelections = {};
-  questionLocked = false;
+  questionLocked  = false;
 
-  prevBtn.disabled = currentIndex === 0;
-  nextBtn.disabled = true;
-  skipBtn.disabled = false;
+  prevBtn.disabled      = currentIndex === 0;
+  nextBtn.disabled      = true;
+  skipBtn.disabled      = false;
   skipBtn.style.display = currentIndex === questions.length - 1 ? 'none' : '';
-  feedbackEl.className = 'feedback';
-  feedbackEl.textContent = '';
 
-  questionTag.textContent = question.topic || 'CCNA Practice';
+  feedbackEl.className   = 'feedback';
+  feedbackEl.textContent = '';
+  questionTag.textContent  = question.topic || 'CCNA Practice';
   questionText.textContent = question.question;
-  answersEl.innerHTML = '';
+  answersEl.innerHTML      = '';
 
   const savedState = userHistory[currentIndex] || null;
-  const locked = !!savedState;
+  const locked     = !!savedState;
   if (locked) questionLocked = true;
 
   if (question.type === 'match') {
     feedbackEl.textContent = 'Match each category to the correct option using the dropdowns.';
     renderMatchQuestion(question, locked, savedState);
     if (locked) {
-      nextBtn.disabled = false;
-      skipBtn.disabled = true;
+      nextBtn.disabled    = false;
+      skipBtn.disabled    = true;
       nextBtn.textContent = currentIndex === questions.length - 1 ? 'Finish' : 'Next';
     }
+
   } else if (question.type === 'multiselect') {
     renderMultiselectQuestion(question, locked, savedState);
     if (locked) {
-      nextBtn.disabled = false;
-      skipBtn.disabled = true;
+      nextBtn.disabled    = false;
+      skipBtn.disabled    = true;
       nextBtn.textContent = currentIndex === questions.length - 1 ? 'Finish' : 'Next';
     }
+
   } else {
-    // Standard single-answer
     const expectedCorrect = Array.isArray(question.correctIndex) ? question.correctIndex : [question.correctIndex];
     feedbackEl.textContent = 'Select an answer to see instant feedback.';
 
-    question.answers.forEach((answer, index) => {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'answer-btn';
-      button.textContent = answer;
-      button.setAttribute('role', 'listitem');
-      button.addEventListener('click', () => handleAnswer(index, 1));
-      answersEl.appendChild(button);
+    const answerOrder = getAnswerOrder(question);
+    answerOrder.forEach(origIdx => {
+      const btn = document.createElement('button');
+      btn.type            = 'button';
+      btn.className       = 'answer-btn';
+      btn.textContent     = question.answers[origIdx];
+      btn.dataset.origIdx = origIdx;
+      btn.setAttribute('role', 'listitem');
+      btn.addEventListener('click', () => handleAnswer(origIdx));
+      answersEl.appendChild(btn);
     });
 
     if (savedState) {
       selectedIndices = [...savedState.selectedIndices];
-      const buttons = Array.from(answersEl.querySelectorAll('.answer-btn'));
-      buttons.forEach((btn, i) => {
+      answersEl.querySelectorAll('.answer-btn').forEach(btn => {
+        const origIdx = parseInt(btn.dataset.origIdx);
         btn.disabled = true;
-        if (expectedCorrect.includes(i)) btn.classList.add('correct');
-        else if (selectedIndices.includes(i)) btn.classList.add('wrong');
+        if (expectedCorrect.includes(origIdx))      btn.classList.add('correct');
+        else if (selectedIndices.includes(origIdx)) btn.classList.add('wrong');
       });
-
-      if (savedState.isCorrect) {
-        feedbackEl.className = 'feedback success';
-        feedbackEl.innerHTML = `<strong>Correct.</strong> ${question.explanation || ''}`;
-      } else {
-        const correctText = expectedCorrect.map(i => question.answers[i]).join('", "');
-        feedbackEl.className = 'feedback error';
-        feedbackEl.innerHTML = `<strong>Incorrect.</strong> Correct answer: <strong>"${correctText}"</strong>. ${question.explanation || ''}`;
-      }
-
-      nextBtn.disabled = false;
-      skipBtn.disabled = true;
+      feedbackEl.className = savedState.isCorrect ? 'feedback success' : 'feedback error';
+      feedbackEl.innerHTML = savedState.isCorrect
+        ? `<strong>Correct.</strong> ${question.explanation || ''}`
+        : `<strong>Incorrect.</strong> Correct answer: <strong>"${expectedCorrect.map(i => question.answers[i]).join('", "')}"</strong>. ${question.explanation || ''}`;
+      nextBtn.disabled    = false;
+      skipBtn.disabled    = true;
       nextBtn.textContent = currentIndex === questions.length - 1 ? 'Finish' : 'Next';
     } else {
       nextBtn.textContent = 'Next';
@@ -312,59 +318,59 @@ function renderQuestion() {
   updateHeader();
 }
 
-function handleAnswer(answerIndex) {
+function handleAnswer(origIdx) {
   if (questionLocked) return;
   questionLocked = true;
 
-  const question = questions[currentIndex];
+  const question        = currentQuestion();
   const expectedCorrect = Array.isArray(question.correctIndex) ? question.correctIndex : [question.correctIndex];
-  selectedIndices = [answerIndex];
-  const isCorrect = expectedCorrect.includes(answerIndex);
+  selectedIndices       = [origIdx];
+  const isCorrect       = expectedCorrect.includes(origIdx);
 
-  userHistory[currentIndex] = { selectedIndices: [answerIndex], isCorrect };
+  userHistory[currentIndex] = { selectedIndices: [origIdx], isCorrect };
 
-  const buttons = Array.from(answersEl.querySelectorAll('.answer-btn'));
-  buttons.forEach((btn, i) => {
+  answersEl.querySelectorAll('.answer-btn').forEach(btn => {
+    const idx = parseInt(btn.dataset.origIdx);
     btn.disabled = true;
-    if (expectedCorrect.includes(i)) btn.classList.add('correct');
-    else if (i === answerIndex) btn.classList.add('wrong');
+    if (expectedCorrect.includes(idx))  btn.classList.add('correct');
+    else if (idx === origIdx)           btn.classList.add('wrong');
   });
 
-  if (isCorrect) {
-    feedbackEl.className = 'feedback success';
-    feedbackEl.innerHTML = `<strong>Correct.</strong> ${question.explanation || ''}`;
-  } else {
-    const correctText = expectedCorrect.map(i => question.answers[i]).join('", "');
-    feedbackEl.className = 'feedback error';
-    feedbackEl.innerHTML = `<strong>Incorrect.</strong> Correct answer: <strong>"${correctText}"</strong>. ${question.explanation || ''}`;
-  }
+  feedbackEl.className = isCorrect ? 'feedback success' : 'feedback error';
+  feedbackEl.innerHTML = isCorrect
+    ? `<strong>Correct.</strong> ${question.explanation || ''}`
+    : `<strong>Incorrect.</strong> Correct answer: <strong>"${expectedCorrect.map(i => question.answers[i]).join('", "')}"</strong>. ${question.explanation || ''}`;
 
   nextBtn.textContent = currentIndex === questions.length - 1 ? 'Finish' : 'Next';
-  nextBtn.disabled = false;
-  skipBtn.disabled = true;
+  nextBtn.disabled    = false;
+  skipBtn.disabled    = true;
   updateHeader();
 }
 
-// ─── NAVIGATION ─────────────────────────────────────────────────────────────
+// ─── NAVIGATION ──────────────────────────────────────────────────────────────
 
 function showSummary() {
-  const answered = userHistory.filter(h => h && !h.skipped).length;
-  const currentScore = userHistory.filter(h => h && h.isCorrect).length;
-  const skipped = questions.length - answered;
-  const percentage = answered > 0 ? Math.round((currentScore / answered) * 100) : 0;
-  questionTag.textContent = 'Quiz complete';
+  const answered   = userHistory.filter(h => h && !h.skipped).length;
+  const score      = userHistory.filter(h => h && h.isCorrect).length;
+  const skipped    = questions.length - answered;
+  const percentage = answered > 0 ? Math.round((score / answered) * 100) : 0;
+
+  questionTag.textContent   = 'Quiz complete';
   questionCount.textContent = `${questions.length} / ${questions.length}`;
-  questionText.textContent = 'You finished the practice quiz.';
-  answersEl.innerHTML = '';
-  feedbackEl.className = 'feedback success';
-  feedbackEl.innerHTML = `<strong>Final score:</strong> ${currentScore} out of ${answered} answered (${percentage}%).${skipped > 0 ? ` <strong>${skipped} question${skipped > 1 ? 's' : ''} skipped</strong> — use Back to go answer them.` : ''} Restart for another attempt.`;
-  prevBtn.disabled = false;
-  nextBtn.textContent = 'Finished';
-  nextBtn.disabled = true;
+  questionText.textContent  = 'You finished the practice quiz.';
+  answersEl.innerHTML       = '';
+  feedbackEl.className      = 'feedback success';
+  feedbackEl.innerHTML      = `<strong>Final score:</strong> ${score} out of ${answered} answered (${percentage}%).`
+    + (skipped > 0 ? ` <strong>${skipped} question${skipped > 1 ? 's' : ''} skipped</strong> — use Back to answer them.` : '')
+    + ' Restart for another attempt.';
+
+  prevBtn.disabled      = false;
+  nextBtn.textContent   = 'Finished';
+  nextBtn.disabled      = true;
   skipBtn.style.display = 'none';
-  progressFill.style.width = '100%';
-  progressText.textContent = 'Quiz complete';
-  scoreValue.textContent = `${currentScore} / ${questions.length}`;
+  progressFill.style.width  = '100%';
+  progressText.textContent  = 'Quiz complete';
+  scoreValue.textContent    = `${score} / ${questions.length}`;
 }
 
 function goToNextQuestion() {
@@ -387,33 +393,50 @@ function goToPrevQuestion() {
 
 function skipQuestion() {
   if (currentIndex >= questions.length - 1) return;
-  // Do NOT save to history — question remains unanswered and fully interactive when revisited
   currentIndex += 1;
   renderQuestion();
 }
+
 function restartQuiz() {
-  currentIndex = 0;
+  currentIndex    = 0;
   selectedIndices = [];
   matchSelections = {};
-  userHistory = [];
-  questionLocked = false;
+  userHistory     = [];
+  answerOrders    = {};
+  questionLocked  = false;
+  questionOrder   = questions.map((_, i) => i);
   renderQuestion();
 }
 
-// ─── UTILS ───────────────────────────────────────────────────────────────────
+// ─── SHUFFLE ─────────────────────────────────────────────────────────────────
 
-function shuffleArray(arr) {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
+function toggleShuffle() {
+  isShuffled = !isShuffled;
+
+  if (isShuffled) {
+    shuffleBtn.textContent = '⇄ Shuffled';
+    shuffleBtn.classList.add('btn-shuffle-active');
+  } else {
+    shuffleBtn.textContent = '⇄ Shuffle';
+    shuffleBtn.classList.remove('btn-shuffle-active');
   }
+
+  // Keep question order fixed, just reset answer orders and re-render current question
+  answerOrders = {};
+  userHistory  = [];
+  currentIndex = 0;
+  selectedIndices = [];
+  matchSelections = {};
+  questionLocked  = false;
+  renderQuestion();
 }
 
-// ─── INIT ────────────────────────────────────────────────────────────────────
+// ─── INIT ─────────────────────────────────────────────────────────────────────
 
 prevBtn.addEventListener('click', goToPrevQuestion);
 nextBtn.addEventListener('click', goToNextQuestion);
 skipBtn.addEventListener('click', skipQuestion);
+shuffleBtn.addEventListener('click', toggleShuffle);
 restartBtn.addEventListener('click', restartQuiz);
 
 if (typeof questions !== 'undefined' && questions.length > 0) renderQuestion();

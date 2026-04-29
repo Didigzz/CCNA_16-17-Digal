@@ -290,6 +290,27 @@ h2 {
   background: rgba(180, 35, 24, 0.15);
 }
 
+.btn-shuffle {
+  background: rgba(20, 92, 158, 0.1);
+  color: var(--primary-strong);
+  font-size: 0.88rem;
+  padding: 8px 14px;
+  width: 100%;
+}
+
+.btn-shuffle:hover:not(:disabled) {
+  background: rgba(20, 92, 158, 0.18);
+}
+
+.btn-shuffle-active {
+  background: var(--primary);
+  color: #fff;
+}
+
+.btn-shuffle-active:hover:not(:disabled) {
+  background: var(--primary-strong);
+}
+
 @media (max-width: 720px) {
   .app-shell {
     width: min(100% - 20px, 1000px);
