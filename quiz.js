@@ -348,17 +348,20 @@ function handleAnswer(answerIndex) {
 // ─── NAVIGATION ─────────────────────────────────────────────────────────────
 
 function showSummary() {
+  const answered = userHistory.filter(h => h && !h.skipped).length;
   const currentScore = userHistory.filter(h => h && h.isCorrect).length;
-  const percentage = Math.round((currentScore / questions.length) * 100);
+  const skipped = questions.length - answered;
+  const percentage = answered > 0 ? Math.round((currentScore / answered) * 100) : 0;
   questionTag.textContent = 'Quiz complete';
   questionCount.textContent = `${questions.length} / ${questions.length}`;
   questionText.textContent = 'You finished the practice quiz.';
   answersEl.innerHTML = '';
   feedbackEl.className = 'feedback success';
-  feedbackEl.innerHTML = `<strong>Final score:</strong> ${currentScore} out of ${questions.length} (${percentage}%). Review the topics you missed or restart for another attempt.`;
+  feedbackEl.innerHTML = `<strong>Final score:</strong> ${currentScore} out of ${answered} answered (${percentage}%).${skipped > 0 ? ` <strong>${skipped} question${skipped > 1 ? 's' : ''} skipped</strong> — use Back to go answer them.` : ''} Restart for another attempt.`;
   prevBtn.disabled = false;
   nextBtn.textContent = 'Finished';
   nextBtn.disabled = true;
+  skipBtn.style.display = 'none';
   progressFill.style.width = '100%';
   progressText.textContent = 'Quiz complete';
   scoreValue.textContent = `${currentScore} / ${questions.length}`;
@@ -384,10 +387,7 @@ function goToPrevQuestion() {
 
 function skipQuestion() {
   if (currentIndex >= questions.length - 1) return;
-  // Mark as skipped in history (not answered, not scored)
-  if (!userHistory[currentIndex]) {
-    userHistory[currentIndex] = { skipped: true, isCorrect: false, selectedIndices: [] };
-  }
+  // Do NOT save to history — question remains unanswered and fully interactive when revisited
   currentIndex += 1;
   renderQuestion();
 }
